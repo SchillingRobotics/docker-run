@@ -174,19 +174,22 @@ if [[ -t 0 && -t 1 ]]; then
     MCHP_DOCKER_INTERACTIVE='-it' # We have tty's
 fi
 
-bootstrap_cmd='set -e; if ! command -v jq >/dev/null 2>&1; then (sudo apt update && sudo apt install -y jq) || (apt update && apt install -y jq); fi; exec "$@"'
+bootstrap_cmd='set -e; if ! command -v jq >/dev/null 2>&1; then apt update && apt install -y jq; fi; if command -v runuser >/dev/null 2>&1; then exec runuser -u "$DR_HOST_USER" -- "$@"; elif command -v su >/dev/null 2>&1; then exec su -s /bin/sh "$DR_HOST_USER" -c '"'"'exec "$@"'"'"' sh "$@"; else echo "Unable to drop privileges: runuser/su not available" 1>&2; exit 1; fi'
 
 # Keep launcher behavior simple: if no command is given, open an interactive shell.
 if [[ $# -eq 0 ]]; then
     set -- bash
 fi
 
+host_user=$(id -un)
+
 # $MCHP_DOCKER_IT      : Set to '-it' if run interactively
 # --rm                 : Remove the container at exit
 # -v                   : Mount everything from the directory where .docker.env is located.
 # -w                   : Working directory inside the container is the same as outside.
 # $MCHP_DOCKER_OPTIONS : User supplied options in .docker.env
-args=(run $MCHP_DOCKER_INTERACTIVE --hostname $hostname --rm -v $top:$top -w $(pwd) $MCHP_DOCKER_OPTIONS)
+args=(run $MCHP_DOCKER_INTERACTIVE --hostname $hostname --rm -v $top:$top -w $(pwd) $MCHP_DOCKER_OPTIONS -e DR_HOST_USER=${host_user} -e USER=${host_user} -e LOGNAME=${host_user} -e HOME=${HOME} -v /etc/passwd:/etc/passwd:ro -v /etc/group:/etc/group:ro)
+
 # parse all the other MCHP_DOCKER_OPTIONS$i options, these contains white spaces
 for i in $(seq 0 1024)
 do
@@ -201,7 +204,7 @@ done
 
 # $image               : Docker image to run
 # --entrypoint /bin/sh : Run bootstrap to install jq before normal command
-args+=(--entrypoint /bin/sh $image -lc "$bootstrap_cmd" dr-bootstrap "$@")
+args+=(--entrypoint /bin/sh $image -c "$bootstrap_cmd" dr-bootstrap "$@")
 
 vecho "docker ${args[@]}"
 docker "${args[@]}"
