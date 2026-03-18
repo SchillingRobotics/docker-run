@@ -174,6 +174,13 @@ if [[ -t 0 && -t 1 ]]; then
     MCHP_DOCKER_INTERACTIVE='-it' # We have tty's
 fi
 
+bootstrap_cmd='set -e; if ! command -v jq >/dev/null 2>&1; then (sudo apt update && sudo apt install -y jq) || (apt update && apt install -y jq); fi; exec "$@"'
+
+# Keep launcher behavior simple: if no command is given, open an interactive shell.
+if [[ $# -eq 0 ]]; then
+    set -- bash
+fi
+
 # $MCHP_DOCKER_IT      : Set to '-it' if run interactively
 # --rm                 : Remove the container at exit
 # -v                   : Mount everything from the directory where .docker.env is located.
@@ -193,7 +200,8 @@ do
 done
 
 # $image               : Docker image to run
-args+=($image "$@")
+# --entrypoint /bin/sh : Run bootstrap to install jq before normal command
+args+=(--entrypoint /bin/sh $image -lc "$bootstrap_cmd" dr-bootstrap "$@")
 
 vecho "docker ${args[@]}"
 docker "${args[@]}"
